@@ -1,0 +1,141 @@
+---
+title: "Course Project: Shiny Application and Reproducible Pitch"
+author: "Celine Barlier"
+date: "8/28/2021"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This is the assignment for the course project (week 4) of the course Developing Data Product of Coursera. It consisted in the development of a Shiny application and this reproducible pitch.
+
+I developed a Shiny Application using a large scale weather event in USA (2016-2020) dataset to plot interactive demographic maps.
+
+**Please note that the shiny app takes initially about 1 min to load and show the map.**
+
+Link to the Shiny Application: https://cbarlier.shinyapps.io/ShinyAppWeatherUSA/
+Link to the code: https://github.com/BarlierC/DevDataProduct
+
+## Shiny App
+
+The shiny app display weather event frequencies depending on the type of event, severity and year(s) using the data from: https://smoosavi.org/datasets/lstw
+
+Specific columns have been selected (shown below), a column Year has been created by extracting the specific information from the StartTime.UTC. column and a column oc (occurence) used to compute the frequency.
+
+```{r}
+df = readRDS("C:/Users/celin/Desktop/CourseraProject/ShinyApp/WeatherEvents_Jan2016-Dec2020.rds")
+head(df)
+```
+
+## UI.R code
+```{r eval=FALSE}
+library(plotly)
+
+ui <- fluidPage(
+  
+  # App title ----
+  titlePanel("Weather Events in USA"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      helpText("Create demographic maps of weather events that happened in the USA from 2016 to 2020."),
+
+        selectInput("var", 
+                  label = "Weather event",
+                  choices = c("Snow", 
+                              "Fog",
+                              "Cold", 
+                              "Storm",
+                              "Rain",
+                              "Precipitation",
+                              "Hail"),
+                  selected = "Snow"
+        ),
+      
+        checkboxGroupInput("checkGroup", 
+                         h3("Severity"), 
+                         choices = list("Light" = "Light", 
+                                        "Moderate" = "Moderate", 
+                                        "Severe" = "Severe",
+                                        "Heavy" = "Heavy",
+                                        "Unknown" = "Unknown"),
+                         selected = c("Light","Moderate","Severe","Heavy","Unknown")
+        ),
+        
+        sliderInput("slider", h3("Year(s)"),
+                      min = 2016, max = 2020, value = c(2016,2020), step = 1
+        )
+      
+    ),
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: Map displaying event frequency ----
+      plotlyOutput("mapFreq")
+      
+    )
+  )
+)
+```
+
+
+## server.R code
+```{r eval=FALSE}
+library(plotly)
+library(stringr)
+
+#Load weather data
+df = readRDS("WeatherEvents_Jan2016-Dec2020.rds")
+
+#Add occurrence for later on
+df$oc <- rep(1,nrow(df))
+
+# Define server logic ----
+server <- function(input, output) {
+  
+  # USA map displaying selected event frequency ----
+  output$mapFreq <- renderPlotly({
+    
+    #Select event based on input: event type
+    dfEvent <- df[which(df$Type == input$var),]
+    #Select event based on input: severity/ies
+    dfEvent <- dfEvent[which(dfEvent$Severity %in% c(input$checkGroup)),]
+    #Select event based on input: year(s)
+    dfEvent <- dfEvent[which(dfEvent$Year %in% c(input$slider)),]
+    
+    #If data to show
+    if(nrow(dfEvent) > 0){
+      #Compute frequency = sum of events
+      dfFreq <- aggregate(dfEvent$oc,by=list("State"=dfEvent$State),sum)
+      colnames(dfFreq) <- c("State","Freq")
+      Frequency <- dfFreq$Freq
+      
+      #Element for map
+      plot_geo() %>%
+        add_trace(
+          z = ~Frequency, text = dfFreq$State,
+          locations = dfFreq$State, 
+          locationmode = 'USA-states'
+        ) %>%
+        layout(geo = list(
+          scope = 'usa',
+          projection = list(type = 'albers usa'),
+          lakecolor = toRGB('white')
+        ))
+    }else{
+      plotly_empty() %>%
+      layout(title = "No data to show with selected parameters") 
+    }
+
+  })
+  
+}
+```
